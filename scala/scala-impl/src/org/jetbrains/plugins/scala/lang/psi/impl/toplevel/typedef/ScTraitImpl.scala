@@ -38,12 +38,12 @@ final class ScTraitImpl(stub: ScTemplateDefinitionStub[ScTrait],
   override def processDeclarationsForTemplateBody(processor: PsiScopeProcessor,
                                                   state: ResolveState,
                                                   lastParent: PsiElement,
-                                                  place: PsiElement): Boolean = desugaredElement match {
+                                                  place: PsiElement): Boolean = desugaredDefinition match {
     case Some(td: ScTemplateDefinitionImpl[_]) =>
       td.processDeclarationsForTemplateBody(processor, state, getLastChild, place)
-      case _ =>
-        super[ScTypeParametersOwner].processDeclarations(processor, state, lastParent, place) &&
-          super.processDeclarationsForTemplateBody(processor, state, lastParent, place)
+    case _ =>
+      super[ScTypeParametersOwner].processDeclarations(processor, state, lastParent, place) &&
+        super.processDeclarationsForTemplateBody(processor, state, lastParent, place)
   }
 
   override def processDeclarations(processor: PsiScopeProcessor,

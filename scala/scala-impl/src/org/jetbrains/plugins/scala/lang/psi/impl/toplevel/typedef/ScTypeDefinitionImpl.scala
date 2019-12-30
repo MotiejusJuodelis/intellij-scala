@@ -19,7 +19,7 @@ import com.intellij.psi.stubs.StubElement
 import com.intellij.psi.util.PsiTreeUtil
 import javax.swing.Icon
 import org.jetbrains.plugins.scala.JavaArrayFactoryUtil.ScTypeDefinitionFactory
-import org.jetbrains.plugins.scala.caches.CachesUtil
+import org.jetbrains.plugins.scala.caches.{BlockModificationTracker, CachesUtil}
 import org.jetbrains.plugins.scala.extensions._
 import org.jetbrains.plugins.scala.lang.TokenSets.TYPE_DEFINITIONS
 import org.jetbrains.plugins.scala.lang.lexer._
@@ -27,6 +27,7 @@ import org.jetbrains.plugins.scala.lang.psi.PresentationUtil.accessModifierText
 import org.jetbrains.plugins.scala.lang.psi.api.ScalaFile
 import org.jetbrains.plugins.scala.lang.psi.api.base.ScModifierList
 import org.jetbrains.plugins.scala.lang.psi.api.expr.{ScBlock, ScNewTemplateDefinition}
+import org.jetbrains.plugins.scala.lang.psi.api.statements.ScFunction
 import org.jetbrains.plugins.scala.lang.psi.api.statements.params.ScTypeParam
 import org.jetbrains.plugins.scala.lang.psi.api.toplevel.ScPackaging
 import org.jetbrains.plugins.scala.lang.psi.api.toplevel.templates.{ScExtendsBlock, ScTemplateBody, ScTemplateParents}
@@ -44,6 +45,7 @@ import org.jetbrains.plugins.scala.macroAnnotations.{Cached, CachedInUserData, M
 import org.jetbrains.plugins.scala.projectView.FileKind
 
 import scala.annotation.tailrec
+import scala.collection.Seq
 
 abstract class ScTypeDefinitionImpl[T <: ScTemplateDefinition](stub: ScTemplateDefinitionStub[T],
                                                                nodeType: ScTemplateDefinitionElementType[T],
@@ -54,7 +56,7 @@ abstract class ScTypeDefinitionImpl[T <: ScTemplateDefinition](stub: ScTemplateD
 
   override def hasTypeParameters: Boolean = typeParameters.nonEmpty
 
-  override def typeParameters: Seq[ScTypeParam] = desugaredElement match {
+  override def typeParameters: Seq[ScTypeParam] = desugaredDefinition match {
     case Some(td: ScTypeDefinition) => td.typeParameters
     case _ => super.typeParameters
   }
@@ -382,19 +384,27 @@ abstract class ScTypeDefinitionImpl[T <: ScTemplateDefinition](stub: ScTemplateD
   override def getOriginalElement: PsiElement =
     ScalaPsiImplementationHelper.getOriginalClass(this)
 
-  @Cached(ModCount.getBlockModificationCount, this)
-  private def cachedDesugared(tree: scala.meta.Tree): ScTemplateDefinition =
-    ScalaPsiElementFactory.createTemplateDefinitionFromText(tree.toString(), getContext, this)
-      .setDesugared(actualElement = this)
+  @CachedInUserData(this, ModCount.getBlockModificationCount)
+  override def syntheticTypeDefinitions: Seq[ScTypeDefinition] = SyntheticMembersInjector.injectInners(this)
+
+  @CachedInUserData(this, ModCount.getBlockModificationCount)
+  override def syntheticMembers: Seq[ScMember] = SyntheticMembersInjector.injectMembers(this)
+
+  @CachedInUserData(this, ModCount.getBlockModificationCount)
+  override def syntheticMethods: Seq[ScFunction] = SyntheticMembersInjector.inject(this)
 
   @CachedInUserData(this, CachesUtil.libraryAwareModTracker(this))
   override def psiMethods: Array[PsiMethod] = getAllMethods.filter(_.containingClass == this)
 
-  override def desugaredElement: Option[ScTemplateDefinition] = {
+  @CachedInUserData(this, BlockModificationTracker(this))
+  override protected def desugaredInner: Option[ScTemplateDefinition] = {
+    def toPsi(tree: scala.meta.Tree): ScTemplateDefinition = {
+      ScalaPsiElementFactory.createTemplateDefinitionFromText(tree.toString(), getContext, this)
+        .setDesugaringSource(actualElement = this)
+    }
+
     import scala.meta.intellij.psi._
     import scala.meta.{Defn, Term}
-
-    if (!this.isValid || DumbService.isDumb(getProject)) return None
 
     val defn = this.metaExpand match {
       case Right(templ: Defn.Class) => Some(templ)
@@ -406,7 +416,7 @@ abstract class ScTypeDefinitionImpl[T <: ScTemplateDefinition](stub: ScTemplateD
       case _ => None
     }
 
-    defn.map(cachedDesugared)
+    defn.map(toPsi)
   }
 }
 

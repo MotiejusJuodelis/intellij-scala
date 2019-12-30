@@ -744,8 +744,8 @@ object ScalaPsiUtil {
   // a synthetic method of the same class
   def isSyntheticContextAncestor(ancestor: PsiElement, element: PsiElement): Boolean = {
     ancestor.getContext match {
-      case td: ScTemplateDefinition if td.isDesugared =>
-        PsiTreeUtil.isContextAncestor(td.originalElement.get, element, true)
+      case td: ScTemplateDefinition =>
+        td.desugaringSource.exists(PsiTreeUtil.isContextAncestor(_, element, true))
       case _ => false
     }
   }

@@ -50,7 +50,7 @@ class ScClassImpl(stub: ScTemplateDefinitionStub[ScClass],
   override def additionalClassJavaName: Option[String] =
     if (isCase) Some(getName() + "$") else None
 
-  override def constructor: Option[ScPrimaryConstructor] = desugaredElement match {
+  override def constructor: Option[ScPrimaryConstructor] = desugaredDefinition match {
     case Some(templateDefinition: ScConstructorOwner) => templateDefinition.constructor
     case _ => this.stubOrPsiChild(ScalaElementType.PRIMARY_CONSTRUCTOR)
   }
@@ -64,8 +64,9 @@ class ScClassImpl(stub: ScTemplateDefinitionStub[ScClass],
                                                   place: PsiElement): Boolean = {
     if (DumbService.getInstance(getProject).isDumb) return true
 
-    desugaredElement match {
-      case Some(td: ScTemplateDefinitionImpl[_]) => return td.processDeclarationsForTemplateBody(processor, state, getLastChild, place)
+    desugaredDefinition match {
+      case Some(td: ScTemplateDefinitionImpl[_]) =>
+        return td.processDeclarationsForTemplateBody(processor, state, getLastChild, place)
       case _ =>
     }
 
